@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cosecha por fundo — Campaña 26-27</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root {
+    --color-fg: #1c1c1e;
+    --color-fg-muted: #6b6f76;
+    --color-bg: #ffffff;
+    --color-panel: #f6f7f8;
+    --color-panel-alt: #eef0f2;
+    --color-border-line: #e0e2e6;
+    --color-accent: #2563a8;
+    --blu: #1f5fa8;
+    --uva: #8a3fa0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-fg: #e8e9eb;
+      --color-fg-muted: #9a9ea5;
+      --color-bg: #121317;
+      --color-panel: #1a1b20;
+      --color-panel-alt: #212329;
+      --color-border-line: #2c2e35;
+      --color-accent: #6fa3e0;
+      --blu: #6fa3e0;
+      --uva: #c98be0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --color-fg: #e8e9eb;
+    --color-fg-muted: #9a9ea5;
+    --color-bg: #121317;
+    --color-panel: #1a1b20;
+    --color-panel-alt: #212329;
+    --color-border-line: #2c2e35;
+    --color-accent: #6fa3e0;
+    --blu: #6fa3e0;
+    --uva: #c98be0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 28px 32px 40px; }
+  h1 { font-size: 1.35rem; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 18px; color: var(--color-fg-muted); font-size: 0.88rem; max-width: 760px; line-height: 1.45; }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px;
+  }
+
+  .campaign-filter {
+    display: inline-flex; background: var(--color-panel); border: 1px solid var(--color-border-line);
+    border-radius: 9px; padding: 3px; gap: 2px;
+  }
+  .campaign-filter button {
+    appearance: none; border: none; background: transparent; color: var(--color-fg-muted);
+    font: inherit; font-size: 0.8rem; font-weight: 600; padding: 7px 13px; border-radius: 6px;
+    cursor: pointer; transition: background 0.12s, color 0.12s; white-space: nowrap;
+  }
+  .campaign-filter button:hover { color: var(--color-fg); }
+  .campaign-filter button.active { background: var(--color-bg); color: var(--color-fg); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 20px; align-items: center;
+    margin-bottom: 14px; padding: 10px 14px;
+    background: var(--color-panel); border: 1px solid var(--color-border-line);
+    border-radius: 10px; font-size: 0.8rem; color: var(--color-fg-muted);
+  }
+  .leg-item { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .leg-icon { width: 16px; height: 16px; flex: none; }
+  .leg-bar { width: 22px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+  .leg-bar.finish-blu { background: var(--blu); opacity: 0.45; border: 1px solid var(--blu); }
+  .leg-bar.finish-uva { background: var(--uva); opacity: 0.45; border: 1px solid var(--uva); }
+  .leg-bar.pend { background: transparent; border: 1.5px dashed var(--color-fg-muted); }
+  .leg-bar.pausa { background: repeating-linear-gradient(45deg, var(--color-fg-muted) 0 2px, transparent 2px 5px); opacity: 0.6; border: 1px solid var(--color-border-line); }
+  .leg-sep { width: 1px; align-self: stretch; background: var(--color-border-line); }
+
+  .chart-card {
+    border: 1px solid var(--color-border-line);
+    border-radius: 12px;
+    background: var(--color-bg);
+    padding: 6px 0 0;
+    overflow: hidden;
+  }
+  .chart-wrap { position: relative; width: 100%; overflow-x: auto; }
+
+  .row-label { font-size: 0.9rem; font-weight: 500; fill: var(--color-fg); }
+  .axis-x path { stroke: var(--color-border-line); }
+  .axis-x line { stroke: var(--color-border-line); }
+  .axis-x text { fill: var(--color-fg-muted); font-size: 0.64rem; }
+  .gridline { stroke: var(--color-border-line); opacity: 0.8; }
+  .zebra { fill: var(--color-panel); }
+  .today-line { stroke: var(--color-fg-muted); stroke-width: 1.25; stroke-dasharray: 3,3; }
+  .today-pill-bg { fill: var(--color-bg); stroke: var(--color-border-line); }
+  .today-pill-text { fill: var(--color-fg-muted); font-size: 0.68rem; font-weight: 600; }
+  .campaign-line { stroke: var(--color-accent); stroke-width: 1; stroke-dasharray: 1,0; opacity: 0.55; }
+  .campaign-pill-bg { fill: var(--color-bg); stroke: var(--color-accent); opacity: 0.9; }
+  .campaign-pill-text { fill: var(--color-accent); font-size: 0.66rem; font-weight: 700; }
+
+  .pending-pill { fill: transparent; stroke: var(--color-fg-muted); stroke-dasharray: 3,3; rx: 7; }
+  .pending-text { fill: var(--color-fg-muted); font-size: 0.68rem; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; background: var(--color-panel);
+    border: 1px solid var(--color-border-line); border-radius: 8px; padding: 9px 11px;
+    font-size: 0.78rem; color: var(--color-fg); box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    max-width: 270px; z-index: 10; opacity: 0; transition: opacity 0.12s; line-height: 1.5;
+  }
+  .tooltip b { font-weight: 650; }
+  .tooltip .muted { color: var(--color-fg-muted); }
+
+  .note { margin: 10px 2px 0; font-size: 0.76rem; color: var(--color-fg-muted); max-width: 760px; line-height: 1.4; }
+  .footer { margin-top: 18px; font-size: 0.72rem; color: var(--color-fg-muted); border-top: 1px solid var(--color-border-line); padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cosecha por fundo — Campaña 26-27</h1>
+  <p class="sub">Periodo de cosecha por fundo: desde el inicio del bloque vigente (o el último cerrado) hasta hoy. Datos reales de la tabla <code>rendimiento</code>, filtrados por las labores de cosechador (arándano) y corte de fruta (uva).</p>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <symbol id="icon-blu" viewBox="0 0 24 24">
+        <circle cx="9" cy="14" r="5" fill="#2f5fa0"/>
+        <circle cx="15" cy="13" r="5.5" fill="#1f4c8a"/>
+        <circle cx="12" cy="18" r="5" fill="#3a6fb5"/>
+        <path d="M14.3 7.2 l1.4 0 -0.3 1.6 -0.8 0.3 -0.8 -0.3 z" fill="#5a3a24"/>
+        <path d="M15 7.2 q2 -2.2 4 -1.2 q-1.6 2 -4 1.2 z" fill="#5a9c4c"/>
+      </symbol>
+      <symbol id="icon-uva" viewBox="0 0 24 24">
+        <path d="M12 3 q2.4 -1.6 4.6 -0.3 q-1.6 2 -4.6 0.3 z" fill="#5a9c4c"/>
+        <circle cx="12" cy="6.5" r="2.1" fill="#8a3fa0"/>
+        <circle cx="9" cy="9" r="2.1" fill="#7a3591"/>
+        <circle cx="15" cy="9" r="2.1" fill="#7a3591"/>
+        <circle cx="7.3" cy="12.5" r="2.1" fill="#8a3fa0"/>
+        <circle cx="12" cy="12.5" r="2.1" fill="#7a3591"/>
+        <circle cx="16.7" cy="12.5" r="2.1" fill="#8a3fa0"/>
+        <circle cx="9.6" cy="16" r="2.1" fill="#7a3591"/>
+        <circle cx="14.4" cy="16" r="2.1" fill="#8a3fa0"/>
+        <circle cx="12" cy="19.4" r="2.1" fill="#7a3591"/>
+      </symbol>
+      <pattern id="pausa-hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+        <rect width="6" height="6" fill="var(--color-bg)" opacity="0.001"></rect>
+        <line x1="0" y1="0" x2="0" y2="6" stroke="var(--color-fg-muted)" stroke-width="2.4"></line>
+      </pattern>
+    </defs>
+  </svg>
+
+  <div class="toolbar">
+    <div class="campaign-filter" id="campaignFilter" role="group" aria-label="Filtro de campaña">
+      <button type="button" data-filter="all" class="active">Ambas campañas</button>
+      <button type="button" data-filter="25-26">Campaña 25-26</button>
+      <button type="button" data-filter="26-27">Campaña 26-27</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="leg-item"><svg class="leg-icon" viewBox="0 0 24 24"><use href="#icon-blu"/></svg>Arándano — en curso</span>
+    <span class="leg-item"><svg class="leg-icon" viewBox="0 0 24 24"><use href="#icon-uva"/></svg>Uva — en curso</span>
+    <span class="leg-sep"></span>
+    <span class="leg-item"><i class="leg-bar finish-blu"></i>Arándano — finalizada</span>
+    <span class="leg-item"><i class="leg-bar finish-uva"></i>Uva — finalizada</span>
+    <span class="leg-sep"></span>
+    <span class="leg-item"><i class="leg-bar pausa"></i>Pausa (≥4 días)</span>
+    <span class="leg-item"><i class="leg-bar pend"></i>Sin cosecha / por iniciar</span>
+  </div>
+
+  <div class="chart-card">
+    <div id="chart" class="chart-wrap"></div>
+  </div>
+  <p class="note">El trazado rayado sobre una barra marca una pausa real sin registro de cosecha (≥4 días consecutivos), más allá del descanso semanal normal (2–3 días). Pasa el cursor sobre cualquier barra, pausa o estado para ver el detalle. Campaña 25-26: may-2025 a abr-2026. Campaña 26-27: may-2026 a abr-2027.</p>
+
+  <div class="footer">
+    Fuente: tabla <code>rendimiento</code> (PostgreSQL, PC de Ivan) — snapshot al 18-oct-2026. Fundos: AGA (Agrícola Andrea), Larama Berries, Arenuva, BMP (Los Buenos Muchachos de Pisco), Newterra.
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {"cosecha": [{"nom": "AGA Elise", "cultivo": "Arándano", "inicio_cosecha": "2026-04-29", "fecha_fin": "2026-10-18", "estado": "En curso", "trabajadores_distintos": "739", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR)"}, {"nom": "AGA California", "cultivo": "Arándano", "inicio_cosecha": "2026-05-13", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "2770", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR)"}, {"nom": "AGA California", "cultivo": "Uva", "inicio_cosecha": "2025-12-08", "fecha_fin": "2026-04-28", "estado": "Finalizado", "trabajadores_distintos": "3507", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA); campaña anterior cerrada, próxima aún no inicia"}, {"nom": "AGA Eden", "cultivo": "Arándano", "inicio_cosecha": "2026-04-18", "fecha_fin": "2026-10-18", "estado": "En curso", "trabajadores_distintos": "4106", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR)"}, {"nom": "AGA San Jose", "cultivo": "Arándano", "inicio_cosecha": "", "fecha_fin": "2026-10-18", "estado": "Nuevo fundo en instalación", "trabajadores_distintos": "0", "fuente": "rendimiento: solo labores de instalación/poda inicial de arándano (PO-PODA, PRY-CONSTRUCCION, etc.); aún sin cosecha"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "inicio_cosecha": "2026-05-18", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "2438", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR)"}, {"nom": "AGA Valerie", "cultivo": "Uva", "inicio_cosecha": "2025-12-06", "fecha_fin": "2026-01-13", "estado": "Finalizado", "trabajadores_distintos": "1508", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA); campaña anterior cerrada, próxima aún no inicia"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "inicio_cosecha": "2025-05-15", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "5237", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR; sin interrupción de campaña detectada)"}, {"nom": "AGA Zoe", "cultivo": "Uva", "inicio_cosecha": "2026-10-05", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "93", "fuente": "rendimiento (labores CD-CORTE DE FRUTA; recién iniciada)"}, {"nom": "BMP Nueva California", "cultivo": "Uva", "inicio_cosecha": "2026-01-09", "fecha_fin": "2026-03-30", "estado": "Finalizado", "trabajadores_distintos": "717", "fuente": "rendimiento (labores CD-CORTE DE FRUTA/CORTE Y LIMPIA); campaña anterior cerrada"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Arándano", "inicio_cosecha": "2026-07-02", "fecha_fin": "2026-10-18", "estado": "En curso", "trabajadores_distintos": "1637", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR)"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Uva", "inicio_cosecha": "2026-02-16", "fecha_fin": "2026-03-17", "estado": "Finalizado", "trabajadores_distintos": "631", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA); campaña anterior cerrada, próxima aún no inicia"}, {"nom": "Larama California", "cultivo": "Arándano", "inicio_cosecha": "2026-06-01", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "3056", "fuente": "rendimiento (labores CD GR-COSECHADOR BULK/CD.HPP-COSECHADOR)"}, {"nom": "Larama Natalia", "cultivo": "Arándano", "inicio_cosecha": "2026-08-11", "fecha_fin": "2026-10-18", "estado": "En curso", "trabajadores_distintos": "691", "fuente": "rendimiento (labores CD GR-COSECHADOR BULK/CD.HPP-COSECHADOR)"}, {"nom": "Newterra Joaquin", "cultivo": "Uva", "inicio_cosecha": "2026-09-30", "fecha_fin": "2026-10-15", "estado": "En curso", "trabajadores_distintos": "133", "fuente": "rendimiento (labores CD-CORTE Y LIMPIA DE FRUTA)"}, {"nom": "Newterra Ñaña", "cultivo": "Uva", "inicio_cosecha": "2025-12-13", "fecha_fin": "2026-01-02", "estado": "Finalizado", "trabajadores_distintos": "255", "fuente": "rendimiento (labores CD-CORTE Y LIMPIA DE FRUTA); sin campaña 2026 registrada aún"}, {"nom": "Newterra Benjamin", "cultivo": "Uva", "inicio_cosecha": "2026-09-30", "fecha_fin": "2026-10-17", "estado": "En curso", "trabajadores_distintos": "234", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA y CORTE Y LIMPIA DE FRUTA)"}, {"nom": "AGA Zoe", "cultivo": "Uva", "inicio_cosecha": "2025-10-13", "fecha_fin": "2025-12-15", "estado": "Finalizado", "trabajadores_distintos": "536", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA); campaña anterior cerrada, próxima aún no inicia"}, {"nom": "AGA Elise", "cultivo": "Arándano", "inicio_cosecha": "2025-07-22", "fecha_fin": "2025-12-20", "estado": "Finalizado", "trabajadores_distintos": "637", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR); campaña 25-26, cerrada"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "inicio_cosecha": "2025-05-31", "fecha_fin": "2025-12-20", "estado": "Finalizado", "trabajadores_distintos": "1729", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR); campaña 25-26, cerrada"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Arándano", "inicio_cosecha": "2025-07-03", "fecha_fin": "2025-12-20", "estado": "Finalizado", "trabajadores_distintos": "1332", "fuente": "rendimiento (labores CD GR-COSECHADOR/CD.HPP-COSECHADOR, fundos Santa Zoila + Santa Zoila 2,3); campaña 25-26, cerrada"}, {"nom": "Larama California", "cultivo": "Arándano", "inicio_cosecha": "2025-06-23", "fecha_fin": "2026-02-05", "estado": "Finalizado", "trabajadores_distintos": "4037", "fuente": "rendimiento (labores CD GR-COSECHADOR BULK/CD.HPP-COSECHADOR); campaña 25-26, cerrada"}, {"nom": "Larama Natalia", "cultivo": "Arándano", "inicio_cosecha": "2025-08-28", "fecha_fin": "2026-02-06", "estado": "Finalizado", "trabajadores_distintos": "2563", "fuente": "rendimiento (labores CD GR-COSECHADOR BULK/CD.HPP-COSECHADOR); campaña 25-26, cerrada"}, {"nom": "AGA Carrizales", "cultivo": "Uva", "inicio_cosecha": "2025-12-12", "fecha_fin": "2025-12-30", "estado": "Finalizado", "trabajadores_distintos": "431", "fuente": "rendimiento (labores CD/CN-CORTE DE FRUTA); campaña 25-26, cosecha principal"}], "pausas": [{"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2025-05-23", "pausa_fin": "2025-05-30", "dias_sin_cosecha": "8", "nota": "Pausa al inicio de la campaña anterior (ramp-up)"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2025-06-05", "pausa_fin": "2025-06-08", "dias_sin_cosecha": "4", "nota": "Corte breve en jun-2025"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2025-06-26", "pausa_fin": "2025-06-29", "dias_sin_cosecha": "4", "nota": "Corte breve en jun-2025"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2026-04-23", "pausa_fin": "2026-04-26", "dias_sin_cosecha": "4", "nota": "Ritmo semanal (1x/semana) en la transición abr-may 2026"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2026-04-30", "pausa_fin": "2026-05-03", "dias_sin_cosecha": "4", "nota": "Ritmo semanal (1x/semana) en la transición abr-may 2026"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2026-05-07", "pausa_fin": "2026-05-10", "dias_sin_cosecha": "4", "nota": "Ritmo semanal (1x/semana) en la transición abr-may 2026"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2026-05-14", "pausa_fin": "2026-05-17", "dias_sin_cosecha": "4", "nota": "Ritmo semanal (1x/semana) en la transición abr-may 2026"}, {"nom": "AGA Zoe", "cultivo": "Arándano", "pausa_inicio": "2026-05-21", "pausa_fin": "2026-05-24", "dias_sin_cosecha": "4", "nota": "Ritmo semanal (1x/semana) en la transición abr-may 2026"}, {"nom": "AGA California", "cultivo": "Uva", "pausa_inicio": "2026-04-01", "pausa_fin": "2026-04-05", "dias_sin_cosecha": "5", "nota": "Pausa hacia el cierre de campaña"}, {"nom": "AGA California", "cultivo": "Uva", "pausa_inicio": "2026-04-08", "pausa_fin": "2026-04-13", "dias_sin_cosecha": "6", "nota": "Pausa hacia el cierre de campaña"}, {"nom": "AGA California", "cultivo": "Uva", "pausa_inicio": "2026-04-16", "pausa_fin": "2026-04-27", "dias_sin_cosecha": "12", "nota": "Pausa larga previa al cierre de campaña"}, {"nom": "AGA Eden", "cultivo": "Arándano", "pausa_inicio": "2026-04-19", "pausa_fin": "2026-04-23", "dias_sin_cosecha": "5", "nota": "Pausa al inicio de campaña"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "pausa_inicio": "2026-05-20", "pausa_fin": "2026-05-27", "dias_sin_cosecha": "8", "nota": "Pausa al inicio de campaña"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "pausa_inicio": "2026-07-02", "pausa_fin": "2026-07-05", "dias_sin_cosecha": "4", "nota": "Pausa breve"}, {"nom": "BMP Nueva California", "cultivo": "Uva", "pausa_inicio": "2026-03-22", "pausa_fin": "2026-03-25", "dias_sin_cosecha": "4", "nota": "Pausa hacia el cierre de campaña"}, {"nom": "Larama California", "cultivo": "Arándano", "pausa_inicio": "2026-06-05", "pausa_fin": "2026-06-11", "dias_sin_cosecha": "7", "nota": "Pausa al inicio de campaña"}, {"nom": "Newterra Benjamin", "cultivo": "Uva", "pausa_inicio": "2026-10-10", "pausa_fin": "2026-10-16", "dias_sin_cosecha": "7", "nota": "Pausa reciente, campaña recién iniciada"}, {"nom": "Newterra Joaquin", "cultivo": "Uva", "pausa_inicio": "2026-10-07", "pausa_fin": "2026-10-14", "dias_sin_cosecha": "8", "nota": "Pausa reciente, campaña recién iniciada"}, {"nom": "AGA Zoe", "cultivo": "Uva", "pausa_inicio": "2025-10-14", "pausa_fin": "2025-10-17", "dias_sin_cosecha": 4, "nota": "Pausa breve al inicio de campaña"}, {"nom": "AGA Zoe", "cultivo": "Uva", "pausa_inicio": "2025-11-12", "pausa_fin": "2025-11-16", "dias_sin_cosecha": 5, "nota": "Pausa a media campaña"}, {"nom": "AGA Elise", "cultivo": "Arándano", "pausa_inicio": "2025-07-23", "pausa_fin": "2025-07-29", "dias_sin_cosecha": 7, "nota": "Pausa al inicio de campaña 25-26"}, {"nom": "AGA Elise", "cultivo": "Arándano", "pausa_inicio": "2025-08-01", "pausa_fin": "2025-08-04", "dias_sin_cosecha": 4, "nota": "Pausa breve, ramp-up"}, {"nom": "AGA Elise", "cultivo": "Arándano", "pausa_inicio": "2025-08-08", "pausa_fin": "2025-08-12", "dias_sin_cosecha": 5, "nota": "Pausa breve, ramp-up"}, {"nom": "AGA Elise", "cultivo": "Arándano", "pausa_inicio": "2025-08-15", "pausa_fin": "2025-08-19", "dias_sin_cosecha": 5, "nota": "Pausa breve, ramp-up"}, {"nom": "AGA Elise", "cultivo": "Arándano", "pausa_inicio": "2025-08-28", "pausa_fin": "2025-09-01", "dias_sin_cosecha": 5, "nota": "Pausa breve, ramp-up"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "pausa_inicio": "2025-06-01", "pausa_fin": "2025-06-10", "dias_sin_cosecha": 10, "nota": "Pausa larga al inicio de campaña 25-26"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "pausa_inicio": "2025-06-12", "pausa_fin": "2025-06-30", "dias_sin_cosecha": 19, "nota": "Pausa muy larga, ramp-up inicial de campaña 25-26"}, {"nom": "AGA Valerie", "cultivo": "Arándano", "pausa_inicio": "2025-07-25", "pausa_fin": "2025-07-28", "dias_sin_cosecha": 4, "nota": "Pausa breve"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Arándano", "pausa_inicio": "2025-07-05", "pausa_fin": "2025-07-14", "dias_sin_cosecha": 10, "nota": "Pausa al inicio de campaña 25-26"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Arándano", "pausa_inicio": "2025-07-25", "pausa_fin": "2025-07-28", "dias_sin_cosecha": 4, "nota": "Pausa breve, ramp-up"}, {"nom": "Arenuva Santa Zoila", "cultivo": "Arándano", "pausa_inicio": "2025-08-07", "pausa_fin": "2025-08-10", "dias_sin_cosecha": 4, "nota": "Pausa breve, ramp-up"}, {"nom": "Larama California", "cultivo": "Arándano", "pausa_inicio": "2025-06-26", "pausa_fin": "2025-07-06", "dias_sin_cosecha": 11, "nota": "Pausa larga al inicio de campaña 25-26"}, {"nom": "Larama California", "cultivo": "Arándano", "pausa_inicio": "2025-07-11", "pausa_fin": "2025-07-17", "dias_sin_cosecha": 7, "nota": "Pausa, ramp-up"}, {"nom": "Larama California", "cultivo": "Arándano", "pausa_inicio": "2025-07-26", "pausa_fin": "2025-07-30", "dias_sin_cosecha": 5, "nota": "Pausa breve, ramp-up"}]};
+
+(function () {
+  const container = document.getElementById('chart');
+  const tooltip = document.getElementById('tooltip');
+
+  const esLocale = d3.timeFormatLocale({
+    dateTime: '%A, %e de %B de %Y, %X',
+    date: '%d/%m/%Y',
+    time: '%H:%M:%S',
+    periods: ['AM', 'PM'],
+    days: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+    shortDays: ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'],
+    months: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
+    shortMonths: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  });
+  const parseDate = d3.timeParse('%Y-%m-%d');
+  const fmt = esLocale.format('%d-%b-%Y');
+  const axisFmt = esLocale.format('%b-%y');
+  const todayFmt = esLocale.format('%d %b');
+  const rootStyle = getComputedStyle(document.documentElement);
+  const BLU = rootStyle.getPropertyValue('--blu').trim() || '#1f5fa8';
+  const UVA = rootStyle.getPropertyValue('--uva').trim() || '#8a3fa0';
+
+  function showTip(html, x, y) {
+    tooltip.innerHTML = html;
+    const pad = 14;
+    let left = x + pad, top = y + pad;
+    if (left + 280 > window.innerWidth) left = x - 280 - pad;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.style.opacity = 1;
+  }
+  function hideTip() { tooltip.style.opacity = 0; }
+
+  const rows = DATA.cosecha;
+  const pausasByKey = new Map();
+  DATA.pausas.forEach(p => {
+    const key = p.nom + '|' + p.cultivo;
+    if (!pausasByKey.has(key)) pausasByKey.set(key, []);
+    pausasByKey.get(key).push(p);
+  });
+
+  const fundoOrder = [
+    'AGA Elise', 'AGA California', 'AGA Carrizales', 'AGA Eden', 'AGA San Jose',
+    'AGA Valerie', 'AGA Zoe', 'BMP Nueva California', 'Arenuva Santa Zoila',
+    'Larama California', 'Larama Natalia', 'Newterra Joaquin', 'Newterra Ñaña',
+    'Newterra Benjamin'
+  ];
+  const cultivoOrder = { 'Arándano': 0, 'Uva': 1 };
+
+  const byFundo = new Map();
+  rows.forEach(r => {
+    if (!byFundo.has(r.nom)) byFundo.set(r.nom, []);
+    byFundo.get(r.nom).push(r);
+  });
+  byFundo.forEach(list => list.sort((a, b) => cultivoOrder[a.cultivo] - cultivoOrder[b.cultivo]));
+  const fundos = fundoOrder.filter(f => byFundo.has(f));
+
+  const today = new Date();
+
+  // Campaign definitions: 25-26 = may-2025 a abr-2026 ; 26-27 = may-2026 a abr-2027
+  const CAMPAIGNS = {
+    '25-26': { label: 'Campaña 25-26', start: new Date(2025, 4, 1), end: new Date(2026, 3, 30) },
+    '26-27': { label: 'Campaña 26-27', start: new Date(2026, 4, 1), end: new Date(2027, 3, 30) }
+  };
+
+  // overall data extent (used for the "ambas campañas" view)
+  let dataMin = today, dataMax = today;
+  rows.forEach(r => {
+    if (r.inicio_cosecha) { const d = parseDate(r.inicio_cosecha); if (d && d < dataMin) dataMin = d; }
+    if (r.fecha_fin) { const d = parseDate(r.fecha_fin); if (d && d > dataMax) dataMax = d; }
+  });
+  dataMin = d3.timeMonth.offset(d3.timeMonth.floor(dataMin), -1);
+  dataMax = d3.timeMonth.offset(d3.timeMonth.ceil(dataMax), 1);
+
+  // --- layout constants ---
+  const rowHeight = 50;
+  const barHeight = 15;
+  const barGap = 6;
+  const margin = { top: 48, right: 28, bottom: 32, left: 172 };
+  const iconColW = 20;
+  const minChartWidth = 1000;
+
+  function overlaps(aStart, aEnd, bStart, bEnd) {
+    return aStart <= bEnd && aEnd >= bStart;
+  }
+  function clip(d, lo, hi) {
+    return d < lo ? lo : (d > hi ? hi : d);
+  }
+
+  function renderChart(filterId) {
+    container.innerHTML = '';
+
+    let domainMin, domainMax, campaignBoundaryDate = null, pausaLo, pausaHi;
+    if (filterId === 'all') {
+      domainMin = dataMin; domainMax = dataMax;
+      pausaLo = dataMin; pausaHi = dataMax;
+      campaignBoundaryDate = CAMPAIGNS['26-27'].start;
+    } else {
+      const c = CAMPAIGNS[filterId];
+      domainMin = d3.timeMonth.offset(d3.timeMonth.floor(c.start), -1);
+      domainMax = d3.timeMonth.offset(d3.timeMonth.ceil(c.end), 1);
+      // pauses are bound strictly to the campaign window (not the padded axis domain),
+      // so a pause belonging to the adjacent campaign never bleeds into this view
+      pausaLo = c.start; pausaHi = c.end;
+    }
+
+    // build per-fundo list of records visible in this filter, clipped to the campaign window when filtered
+    const visibleByFundo = new Map();
+    fundos.forEach(fundo => {
+      const recs = byFundo.get(fundo);
+      const kept = [];
+      recs.forEach(r => {
+        if (filterId === 'all') {
+          kept.push(Object.assign({}, r, { _x0: r.inicio_cosecha ? parseDate(r.inicio_cosecha) : null, _x1: r.fecha_fin ? parseDate(r.fecha_fin) : null }));
+          return;
+        }
+        const c = CAMPAIGNS[filterId];
+        if (!r.inicio_cosecha || !r.fecha_fin) {
+          // pending / sin-fecha state: only show under the campaign that contains "today"
+          const todayCampaign = (today >= CAMPAIGNS['25-26'].start && today <= CAMPAIGNS['25-26'].end) ? '25-26' : '26-27';
+          if (filterId === todayCampaign) kept.push(Object.assign({}, r, { _x0: null, _x1: null }));
+          return;
+        }
+        const d0 = parseDate(r.inicio_cosecha), d1 = parseDate(r.fecha_fin);
+        if (!overlaps(d0, d1, c.start, c.end)) return;
+        kept.push(Object.assign({}, r, { _x0: clip(d0, c.start, c.end), _x1: clip(d1, c.start, c.end) }));
+      });
+      if (kept.length) visibleByFundo.set(fundo, kept);
+    });
+    const visibleFundos = fundos.filter(f => visibleByFundo.has(f));
+
+    const x = d3.scaleTime().domain([domainMin, domainMax]).range([0, 0]); // range set after width known
+    const plotHeight = visibleFundos.length * rowHeight;
+
+    const availWidth = Math.max(container.clientWidth || minChartWidth, minChartWidth);
+    const width = availWidth;
+    const height = plotHeight + margin.top + margin.bottom;
+    const innerWidth = width - margin.left - margin.right;
+    x.range([0, innerWidth]);
+
+    const svg = d3.select(container).append('svg')
+      .attr('width', width).attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .style('display', 'block');
+
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // zebra striping per fundo row (full width incl. label gutter)
+    visibleFundos.forEach((fundo, i) => {
+      if (i % 2 === 1) {
+        g.append('rect')
+          .attr('class', 'zebra')
+          .attr('x', -margin.left + 12).attr('y', i * rowHeight)
+          .attr('width', innerWidth + margin.left - 12 + margin.right).attr('height', rowHeight);
+      }
+    });
+
+    // month gridlines
+    const months = d3.timeMonth.range(d3.timeMonth.floor(domainMin), domainMax);
+    g.selectAll('.gridline').data(months).enter().append('line')
+      .attr('class', 'gridline')
+      .attr('x1', d => x(d)).attr('x2', d => x(d))
+      .attr('y1', 0).attr('y2', plotHeight);
+
+    // row separators
+    g.selectAll('.rowsep').data(d3.range(visibleFundos.length + 1)).enter().append('line')
+      .attr('x1', -margin.left + 12).attr('x2', innerWidth)
+      .attr('y1', d => d * rowHeight).attr('y2', d => d * rowHeight)
+      .attr('stroke', 'var(--color-border-line)').attr('stroke-width', 1);
+
+    // x axis — one tick per month, compact "May-25" style
+    g.append('g').attr('class', 'axis-x')
+      .attr('transform', `translate(0,${plotHeight})`)
+      .call(d3.axisBottom(x).ticks(d3.timeMonth.every(1)).tickFormat(axisFmt).tickSizeOuter(0));
+
+    // campaign boundary marker (only meaningful in the combined view)
+    if (campaignBoundaryDate && campaignBoundaryDate > domainMin && campaignBoundaryDate < domainMax) {
+      const bx = x(campaignBoundaryDate);
+      g.append('line').attr('class', 'campaign-line')
+        .attr('x1', bx).attr('x2', bx).attr('y1', -6).attr('y2', plotHeight);
+      const label = 'Inicio campaña 26-27';
+      const labelW = label.length * 5.4 + 14;
+      const lx = clip(bx - labelW / 2, -margin.left + 16, innerWidth - labelW);
+      g.append('rect').attr('class', 'campaign-pill-bg')
+        .attr('x', lx).attr('y', -40).attr('width', labelW).attr('height', 15).attr('rx', 7);
+      g.append('text').attr('class', 'campaign-pill-text')
+        .attr('x', lx + labelW / 2).attr('y', -29.5).attr('text-anchor', 'middle')
+        .text(label);
+    }
+
+    // today marker (only if visible within the current domain)
+    if (today >= domainMin && today <= domainMax) {
+      g.append('line').attr('class', 'today-line')
+        .attr('x1', x(today)).attr('x2', x(today))
+        .attr('y1', -6).attr('y2', plotHeight);
+      const todayLabel = 'Hoy · ' + todayFmt(today);
+      const todayTextW = todayLabel.length * 5.6 + 14;
+      const todayLeft = clip(x(today) - todayTextW / 2, -margin.left + 16, innerWidth - todayTextW);
+      g.append('rect').attr('class', 'today-pill-bg')
+        .attr('x', todayLeft).attr('y', -22).attr('width', todayTextW).attr('height', 16).attr('rx', 8);
+      g.append('text').attr('class', 'today-pill-text')
+        .attr('x', todayLeft + todayTextW / 2).attr('y', -11).attr('text-anchor', 'middle')
+        .text(todayLabel);
+    }
+
+    function drawPausas(fundo, cultivo, yBar, lo, hi) {
+      const pausas = pausasByKey.get(fundo + '|' + cultivo);
+      if (!pausas) return;
+      pausas.forEach(p => {
+        let p0 = parseDate(p.pausa_inicio);
+        let p1 = d3.timeDay.offset(parseDate(p.pausa_fin), 1);
+        if (p1 <= lo || p0 >= hi) return;
+        p0 = clip(p0, lo, hi); p1 = clip(p1, lo, hi);
+        const px0 = x(p0);
+        const pw = Math.max(x(p1) - px0, 4);
+        g.append('rect')
+          .attr('x', px0).attr('y', yBar)
+          .attr('width', pw).attr('height', barHeight)
+          .attr('fill', 'url(#pausa-hatch)')
+          .attr('opacity', 0.9)
+          .style('cursor', 'pointer')
+          .on('mousemove', (ev) => showTip(
+            `<b>${fundo} — ${cultivo}</b><br>Pausa: ${fmt(parseDate(p.pausa_inicio))} – ${fmt(parseDate(p.pausa_fin))}<br>${p.dias_sin_cosecha} días sin cosecha<br><span class="muted">${p.nota}</span>`,
+            ev.clientX, ev.clientY))
+          .on('mouseleave', hideTip);
+        g.append('rect')
+          .attr('x', px0).attr('y', yBar)
+          .attr('width', pw).attr('height', barHeight)
+          .attr('fill', 'none')
+          .attr('stroke', 'var(--color-bg)').attr('stroke-width', 1.5);
+      });
+    }
+
+    visibleFundos.forEach((fundo, i) => {
+      const y0 = i * rowHeight;
+      const recs = visibleByFundo.get(fundo);
+
+      g.append('text').attr('class', 'row-label')
+        .attr('x', -margin.left + 12).attr('y', y0 + rowHeight / 2 + 4).attr('text-anchor', 'start')
+        .text(fundo);
+
+      // group by cultivo: every period of the same crop shares one track/row,
+      // since campaigns of the same cultivo never overlap in time
+      const tracksMap = new Map();
+      recs.forEach(r => {
+        if (!tracksMap.has(r.cultivo)) tracksMap.set(r.cultivo, []);
+        tracksMap.get(r.cultivo).push(r);
+      });
+      const tracks = Array.from(tracksMap.entries())
+        .sort((a, b) => cultivoOrder[a[0]] - cultivoOrder[b[0]]);
+
+      const nTracks = tracks.length;
+      const totalBarsH = nTracks * barHeight + (nTracks - 1) * barGap;
+      const startY = y0 + (rowHeight - totalBarsH) / 2;
+
+      tracks.forEach(([cultivo, trackRecs], ti) => {
+        const isBlu = cultivo === 'Arándano';
+        const yBar = startY + ti * (barHeight + barGap);
+        const iconHref = isBlu ? '#icon-blu' : '#icon-uva';
+        const color = isBlu ? BLU : UVA;
+
+        // draw one icon per track (cultivo lane), not per period, to avoid clutter.
+        // use full opacity if any period in this track is ongoing.
+        const anyEnCurso = trackRecs.some(r => r.estado === 'En curso' && r._x0 && r._x1);
+        g.append('use').attr('href', iconHref)
+          .attr('x', -iconColW - 2).attr('y', yBar - (iconColW - barHeight) / 2)
+          .attr('width', iconColW).attr('height', iconColW)
+          .attr('opacity', anyEnCurso ? 1 : 0.5);
+
+        trackRecs.forEach(r => {
+
+        if (r.estado === 'En curso' && r._x0 && r._x1) {
+          const x0 = x(r._x0);
+          const x1 = x(r._x1);
+          g.append('rect')
+            .attr('x', x0).attr('y', yBar)
+            .attr('width', Math.max(x1 - x0, 3)).attr('height', barHeight)
+            .attr('rx', 3).attr('fill', color).style('cursor', 'pointer')
+            .on('mousemove', (ev) => showTip(
+              `<b>${fundo} — ${r.cultivo}</b><br>Estado: <b>en curso</b><br>Inicio: ${fmt(parseDate(r.inicio_cosecha))} · Hasta: ${fmt(parseDate(r.fecha_fin))}<br>Trabajadores distintos: ${r.trabajadores_distintos}<br><span class="muted">${r.fuente}</span>`,
+              ev.clientX, ev.clientY))
+            .on('mouseleave', hideTip);
+        } else if (r.estado === 'Finalizado' && r._x0 && r._x1) {
+          const x0 = x(r._x0);
+          const x1 = x(r._x1);
+          g.append('rect')
+            .attr('x', x0).attr('y', yBar)
+            .attr('width', Math.max(x1 - x0, 3)).attr('height', barHeight)
+            .attr('rx', 3).attr('fill', color).attr('opacity', 0.4).style('cursor', 'pointer')
+            .on('mousemove', (ev) => showTip(
+              `<b>${fundo} — ${r.cultivo}</b><br>Estado: <b>finalizada</b> (campaña anterior)<br>${fmt(parseDate(r.inicio_cosecha))} – ${fmt(parseDate(r.fecha_fin))}<br>Trabajadores distintos: ${r.trabajadores_distintos}<br><span class="muted">${r.fuente}</span>`,
+              ev.clientX, ev.clientY))
+            .on('mouseleave', hideTip);
+          g.append('rect')
+            .attr('x', x0).attr('y', yBar)
+            .attr('width', 3).attr('height', barHeight)
+            .attr('fill', color);
+        } else {
+          const pillW = 150;
+          const px0 = clip(x(today) + 10, -margin.left + 12, innerWidth - pillW);
+          g.append('rect').attr('class', 'pending-pill')
+            .attr('x', px0).attr('y', yBar - 1).attr('width', pillW).attr('height', barHeight + 2).attr('rx', 7)
+            .style('cursor', 'pointer')
+            .on('mousemove', (ev) => showTip(`<b>${fundo} — ${r.cultivo}</b><br>${r.estado}<br><span class="muted">${r.fuente}</span>`, ev.clientX, ev.clientY))
+            .on('mouseleave', hideTip);
+          g.append('text').attr('class', 'pending-text')
+            .attr('x', px0 + pillW / 2).attr('y', yBar + barHeight / 2 + 3.5).attr('text-anchor', 'middle')
+            .text(r.estado)
+            .style('cursor', 'pointer')
+            .on('mousemove', (ev) => showTip(`<b>${fundo} — ${r.cultivo}</b><br>${r.estado}<br><span class="muted">${r.fuente}</span>`, ev.clientX, ev.clientY))
+            .on('mouseleave', hideTip);
+        }
+        }); // end trackRecs.forEach
+        drawPausas(fundo, cultivo, yBar, pausaLo, pausaHi);
+      }); // end tracks.forEach
+    });
+  }
+
+  renderChart('all');
+
+  document.getElementById('campaignFilter').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[data-filter]');
+    if (!btn) return;
+    document.querySelectorAll('#campaignFilter button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderChart(btn.getAttribute('data-filter'));
+  });
+
+  window.addEventListener('resize', () => {
+    const active = document.querySelector('#campaignFilter button.active');
+    renderChart(active ? active.getAttribute('data-filter') : 'all');
+  });
+})();
+</script>
+</body>
+</html>
