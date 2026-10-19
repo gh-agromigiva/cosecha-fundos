@@ -100,6 +100,8 @@
   .axis-x text { fill: var(--color-fg-muted); font-size: 0.64rem; }
   .gridline { stroke: var(--color-border-line); opacity: 0.8; }
   .zebra { fill: var(--color-panel); }
+  .zone-divider { stroke: var(--color-fg-muted); stroke-width: 1.25; opacity: 0.5; }
+  .zone-label { fill: var(--color-fg-muted); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; }
   .today-line { stroke: var(--color-fg-muted); stroke-width: 1.25; stroke-dasharray: 3,3; }
   .today-pill-bg { fill: var(--color-bg); stroke: var(--color-border-line); }
   .today-pill-text { fill: var(--color-fg-muted); font-size: 0.68rem; font-weight: 600; }
@@ -231,11 +233,18 @@ const DATA = {"cosecha": [{"nom": "AGA Elise", "cultivo": "Arándano", "inicio_c
     pausasByKey.get(key).push(p);
   });
 
+  // orden y agrupación por zona, según la tabla de referencia de Ivan
+  const ZONA_BY_NOM = {
+    'AGA Elise': 'Pisco', 'AGA California': 'Pisco', 'AGA Eden': 'Pisco', 'AGA San Jose': 'Pisco',
+    'BMP Nueva California': 'Pisco', 'Arenuva Santa Zoila': 'Pisco', 'Larama California': 'Pisco',
+    'AGA Carrizales': 'Ica', 'AGA Valerie': 'Ica', 'Larama Natalia': 'Ica',
+    'AGA Zoe': 'Norte', 'Newterra Joaquin': 'Norte', 'Newterra Ñaña': 'Norte', 'Newterra Benjamin': 'Norte'
+  };
   const fundoOrder = [
-    'AGA Elise', 'AGA California', 'AGA Carrizales', 'AGA Eden', 'AGA San Jose',
-    'AGA Valerie', 'AGA Zoe', 'BMP Nueva California', 'Arenuva Santa Zoila',
-    'Larama California', 'Larama Natalia', 'Newterra Joaquin', 'Newterra Ñaña',
-    'Newterra Benjamin'
+    'AGA Elise', 'AGA California', 'AGA Eden', 'AGA San Jose',
+    'BMP Nueva California', 'Arenuva Santa Zoila', 'Larama California',
+    'AGA Carrizales', 'AGA Valerie', 'Larama Natalia',
+    'AGA Zoe', 'Newterra Joaquin', 'Newterra Ñaña', 'Newterra Benjamin'
   ];
   const cultivoOrder = { 'Arándano': 0, 'Uva': 1 };
 
@@ -337,13 +346,23 @@ const DATA = {"cosecha": [{"nom": "AGA Elise", "cultivo": "Arándano", "inicio_c
 
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // zebra striping per fundo row (full width incl. label gutter)
+    // group visible fundos into consecutive zone blocks, preserving fundoOrder
+    const zoneGroups = [];
     visibleFundos.forEach((fundo, i) => {
-      if (i % 2 === 1) {
+      const zona = ZONA_BY_NOM[fundo] || '';
+      const last = zoneGroups[zoneGroups.length - 1];
+      if (last && last.zona === zona) last.end = i;
+      else zoneGroups.push({ zona, start: i, end: i });
+    });
+
+    // shading banded per zone group (not per row) so the zone grouping reads clearly
+    zoneGroups.forEach((grp, gi) => {
+      if (gi % 2 === 1) {
         g.append('rect')
           .attr('class', 'zebra')
-          .attr('x', -margin.left + 12).attr('y', i * rowHeight)
-          .attr('width', innerWidth + margin.left - 12 + margin.right).attr('height', rowHeight);
+          .attr('x', -margin.left + 12).attr('y', grp.start * rowHeight)
+          .attr('width', innerWidth + margin.left - 12 + margin.right)
+          .attr('height', (grp.end - grp.start + 1) * rowHeight);
       }
     });
 
@@ -359,6 +378,19 @@ const DATA = {"cosecha": [{"nom": "AGA Elise", "cultivo": "Arándano", "inicio_c
       .attr('x1', -margin.left + 12).attr('x2', innerWidth)
       .attr('y1', d => d * rowHeight).attr('y2', d => d * rowHeight)
       .attr('stroke', 'var(--color-border-line)').attr('stroke-width', 1);
+
+    // zone group dividers + labels (skip the very first group's top edge, already the chart top)
+    zoneGroups.forEach((grp, gi) => {
+      const yTop = grp.start * rowHeight;
+      if (gi > 0) {
+        g.append('line').attr('class', 'zone-divider')
+          .attr('x1', -margin.left + 12).attr('x2', innerWidth)
+          .attr('y1', yTop).attr('y2', yTop);
+      }
+      g.append('text').attr('class', 'zone-label')
+        .attr('x', -margin.left + 12).attr('y', yTop + 13)
+        .text(grp.zona.toUpperCase());
+    });
 
     // x axis — one tick per month, compact "May-25" style
     g.append('g').attr('class', 'axis-x')
